@@ -3,9 +3,8 @@ use chacha20poly1305::aead::{Aead, KeyInit};
 use x25519_dalek::{EphemeralSecret, PublicKey, SharedSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use rand::rngs::OsRng;
-use std::convert::TryInto;
 
-/// Represents a session's cryptographic state
+/// Representa o estado criptográfico de uma sessão
 #[derive(ZeroizeOnDrop)]
 pub struct CryptoSession {
     cipher: ChaCha20Poly1305,
@@ -14,7 +13,7 @@ pub struct CryptoSession {
 }
 
 impl CryptoSession {
-    /// Create a new crypto session from a shared secret
+    /// Cria uma nova sessão cripto a partir de um segredo compartilhado
     pub fn new(shared_secret: &SharedSecret) -> Self {
         let key = Key::from_slice(shared_secret.as_bytes());
         let cipher = ChaCha20Poly1305::new(key);
@@ -25,20 +24,20 @@ impl CryptoSession {
         }
     }
     
-    /// Encrypt a message
+    /// Criptografa uma mensagem
     pub fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let nonce = self.next_nonce()?;
         let ciphertext = self.cipher
             .encrypt(&nonce, plaintext)
             .map_err(|_| CryptoError::EncryptionFailed)?;
         
-        // Prepend nonce to ciphertext
+        // Anexa nonce ao ciphertext
         let mut result = nonce.to_vec();
         result.extend_from_slice(&ciphertext);
         Ok(result)
     }
     
-    /// Decrypt a message
+    /// Descriptografa uma mensagem
     pub fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>, CryptoError> {
         if data.len() < 12 {
             return Err(CryptoError::InvalidData);
@@ -52,12 +51,12 @@ impl CryptoSession {
             .map_err(|_| CryptoError::DecryptionFailed)
     }
     
-    /// Generate the next nonce
+    /// Gera o próximo nonce
     fn next_nonce(&mut self) -> Result<Nonce, CryptoError> {
         let mut nonce_bytes = [0u8; 12];
         nonce_bytes[4..12].copy_from_slice(&self.nonce_counter.to_le_bytes());
-        self.nonce_counter += 1;
         
+        self.nonce_counter += 1;
         if self.nonce_counter == 0 {
             return Err(CryptoError::NonceExhausted);
         }
@@ -66,14 +65,14 @@ impl CryptoSession {
     }
 }
 
-/// Perform X25519 key exchange
+/// Executa troca de chaves X25519
 pub fn perform_key_exchange() -> (EphemeralSecret, PublicKey) {
     let secret = EphemeralSecret::random_from_rng(OsRng);
     let public = PublicKey::from(&secret);
     (secret, public)
 }
 
-/// Complete key exchange and derive shared secret
+/// Completa a troca de chaves e deriva o segredo compartilhado
 pub fn complete_key_exchange(
     our_secret: EphemeralSecret,
     their_public: &PublicKey,
@@ -81,7 +80,7 @@ pub fn complete_key_exchange(
     our_secret.diffie_hellman(their_public)
 }
 
-/// Generate a secure random token
+/// Gera um token aleatório seguro
 pub fn generate_token() -> Vec<u8> {
     use rand::RngCore;
     let mut token = vec![0u8; 32];
@@ -89,7 +88,7 @@ pub fn generate_token() -> Vec<u8> {
     token
 }
 
-/// Cryptographic error types
+/// Tipos de erro criptográfico
 #[derive(Debug)]
 pub enum CryptoError {
     EncryptionFailed,

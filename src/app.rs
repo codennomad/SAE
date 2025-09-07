@@ -1,4 +1,4 @@
-use color_eyre::{eyre::Result, Report};
+use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use std::time::Instant;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -47,7 +47,7 @@ pub enum AppState {
     Disconnected,
 }
 
-/// Main application state
+/// Estado principal da aplicação
 pub struct App {
     pub should_quit: bool,
     pub mode: AppMode,
@@ -88,7 +88,7 @@ impl App {
     pub fn tick(&mut self) {
         self.last_tick = Instant::now();
         
-        // Handle banner timeout
+        // Lida com timeout do banner
         if let Some(banner_start) = self.banner_time {
             if banner_start.elapsed().as_secs() >= 3 {
                 self.banner_time = None;
@@ -96,11 +96,10 @@ impl App {
             }
         }
         
-        // Update message states
+        // Atualiza estados das mensagens
         let now = Instant::now();
         self.messages.retain_mut(|msg| {
             let elapsed = now.duration_since(msg.arrival_time).as_millis();
-            
             match msg.state {
                 MessageState::FadingIn if elapsed > 200 => {
                     msg.state = MessageState::Glitching;
@@ -108,11 +107,12 @@ impl App {
                 MessageState::Glitching if elapsed > 500 => {
                     msg.state = MessageState::Visible;
                 }
-                MessageState::Visible if elapsed > 10000 => { // 10 seconds
+                MessageState::Visible if elapsed > 10000 => {
+                    // 10 segundos
                     msg.state = MessageState::FadingOut;
                 }
                 MessageState::FadingOut if elapsed > 11000 => {
-                    return false; // Remove message
+                    return false; // Remove mensagem
                 }
                 _ => {}
             }
@@ -125,7 +125,7 @@ impl App {
         
         match self.state {
             AppState::Banner => {
-                // Any key during banner skips to menu
+                // Qualquer tecla durante banner pula para menu
                 self.banner_time = None;
                 self.state = AppState::Menu;
             }
@@ -165,44 +165,41 @@ impl App {
                 }
             }
         }
-        
         Ok(())
     }
-    
+
     fn handle_input(&mut self) -> Result<()> {
-        let input = self.input.trim();
-        
+        let input = self.input.trim().to_string(); // Clona o input para evitar problemas de borrow
         if input.is_empty() {
             return Ok(());
         }
-        
+
         if input.starts_with('/') {
-            self.handle_command(input)?;
+            self.handle_command(&input)?;
         } else {
-            // Regular message
-            self.add_message(input.to_string(), Some("You".to_string()));
+            // Mensagem regular
+            self.add_message(input, Some("You".to_string()));
         }
-        
+
         self.input.clear();
         self.input_cursor = 0;
-        
         Ok(())
     }
-    
+
     fn handle_command(&mut self, command: &str) -> Result<()> {
         let parts: Vec<&str> = command.split_whitespace().collect();
         
-        match parts.get(0) {
-            Some("/quit") | Some("/q") | Some("/exit") => {
+        match parts.first() {
+            Some(&"/quit") | Some(&"/q") | Some(&"/exit") => {
                 self.should_quit = true;
             }
-            Some("/invite") | Some("/i") => {
+            Some(&"/invite") | Some(&"/i") => {
                 self.mode = AppMode::Host;
                 self.status_message = "Generating invitation...".to_string();
                 // TODO: Generate actual invite
                 self.invite_uri = Some("sae://example_key@127.0.0.1:8080?token=abc123".to_string());
             }
-            Some("/connect") | Some("/c") => {
+            Some(&"/connect") | Some(&"/c") => {
                 if let Some(uri) = parts.get(1) {
                     self.mode = AppMode::Client;
                     self.status_message = format!("Connecting to {}", uri);
@@ -211,25 +208,24 @@ impl App {
                     self.status_message = "Usage: /connect <sae://uri>".to_string();
                 }
             }
-            Some("/clear") => {
+            Some(&"/clear") => {
                 self.messages.clear();
             }
-            Some("/help") | Some("/h") => {
+            Some(&"/help") | Some(&"/h") => {
                 self.add_system_message("Commands: /invite, /connect <uri>, /clear, /quit");
             }
             _ => {
                 self.status_message = format!("Unknown command: {}", command);
             }
         }
-        
         Ok(())
     }
-    
+
     pub fn add_message(&mut self, content: String, sender: Option<String>) {
         let message = DisplayMessage::new(content, sender);
         self.messages.push(message);
     }
-    
+
     pub fn add_system_message(&mut self, content: &str) {
         self.add_message(content.to_string(), Some("System".to_string()));
     }

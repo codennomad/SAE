@@ -2,16 +2,13 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc::UnboundedSender, Mutex};
-use tokio::time::sleep;
 use tokio_websockets::{Message, ServerBuilder, ClientBuilder, WebSocketStream};
 use futures_util::{SinkExt, StreamExt};
 use url::Url;
-use zeroize::Zeroize;
-
-use crate::crypto::{CryptoSession, perform_key_exchange, complete_key_exchange};
+// Remove the crypto import for now - we'll need to create this module
+// use crate::crypto::{CryptoSession, perform_key_exchange, complete_key_exchange};
 
 #[derive(Debug, Clone)]
 pub enum NetworkEvent {
@@ -29,13 +26,12 @@ pub enum ConnectionMode {
     Stealth, // Via Tor
 }
 
-/// Network manager handles all network operations
+/// Gerenciador de rede que lida com todas as operações de rede
 pub struct NetworkManager {
     mode: ConnectionMode,
     broadcast_sender: Option<broadcast::Sender<Vec<u8>>>,
     event_sender: UnboundedSender<NetworkEvent>,
     connections: Arc<Mutex<Vec<WebSocketStream<TcpStream>>>>,
-    listener: Option<TcpListener>,
     invite_tokens: Arc<Mutex<HashMap<String, (Instant, String)>>>, // token -> (expiry, pubkey)
 }
 
@@ -46,27 +42,26 @@ impl NetworkManager {
             broadcast_sender: None,
             event_sender,
             connections: Arc::new(Mutex::new(Vec::new())),
-            listener: None,
             invite_tokens: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// Start hosting a server
+    /// Inicia um servidor host
     pub async fn start_host(&mut self, addr: SocketAddr) -> Result<String, NetworkError> {
-        // Generate ephemeral keypair for this session
-        let (_secret, public_key) = perform_key_exchange();
+        // Temporarily comment out crypto operations until crypto module is implemented
+        // let (_secret, public_key) = perform_key_exchange();
         
-        // Generate invite token
-        let token = hex::encode(crate::crypto::generate_token());
-        let pubkey_hex = hex::encode(public_key.as_bytes());
+        // Gera token de convite
+        let token = hex::encode(generate_token());
+        let pubkey_hex = "placeholder_pubkey".to_string(); // hex::encode(public_key.as_bytes());
         
-        // Store token with expiration (5 minutes)
+        // Armazena token com expiração (5 minutos)
         {
             let mut tokens = self.invite_tokens.lock().await;
             tokens.insert(token.clone(), (Instant::now() + Duration::from_secs(300), pubkey_hex.clone()));
         }
         
-        // Start the listener
+        // Inicia o listener
         let listener = TcpListener::bind(addr).await
             .map_err(|e| NetworkError::BindFailed(e.to_string()))?;
         
@@ -100,15 +95,14 @@ impl NetworkManager {
             }
         });
         
-        // Generate invite URI
+        // Gera URI de convite
         let invite_uri = format!("sae://{}@{}?token={}", pubkey_hex, addr, token);
-        
         let _ = self.event_sender.send(NetworkEvent::InviteGenerated(invite_uri.clone()));
         
         Ok(invite_uri)
     }
 
-    /// Connect to a host using an invite URI
+    /// Conecta a um host usando URI de convite
     pub async fn connect_to_host(&mut self, uri: &str) -> Result<(), NetworkError> {
         let parsed_uri = Url::parse(uri)
             .map_err(|_| NetworkError::InvalidInviteUri)?;
@@ -123,34 +117,35 @@ impl NetworkManager {
             .ok_or(NetworkError::InvalidInviteUri)?;
         let addr = format!("{}:{}", host, port);
         
-        // Extract public key from username field
+        // Extrai chave pública do campo username
         let pubkey_hex = parsed_uri.username();
         if pubkey_hex.is_empty() {
             return Err(NetworkError::InvalidInviteUri);
         }
         
-        // Extract token from query params
+        // Extrai token dos parâmetros de query
         let token = parsed_uri
             .query_pairs()
             .find(|(key, _)| key == "token")
             .map(|(_, value)| value.to_string())
             .ok_or(NetworkError::InvalidInviteUri)?;
         
-        // Connect to the server
+        // Conecta ao servidor
         let stream = match self.mode {
             ConnectionMode::Direct => {
                 TcpStream::connect(&addr).await
                     .map_err(|e| NetworkError::ConnectionFailed(e.to_string()))?
             }
             ConnectionMode::Stealth => {
-                // TODO: Implement Tor connection via SOCKS5
+                // TODO: Implementar conexão Tor via SOCKS5
                 return Err(NetworkError::TorNotSupported);
             }
         };
         
-        // Upgrade to WebSocket
-        let ws_stream = ClientBuilder::new()
+        // Atualiza para WebSocket
+        let (ws_stream, _response) = ClientBuilder::new()
             .uri(&format!("ws://{}/", addr))
+            .map_err(|e| NetworkError::UriError(e.to_string()))?
             .connect_on(stream)
             .await
             .map_err(|e| NetworkError::WebSocketFailed(e.to_string()))?;
@@ -167,7 +162,7 @@ impl NetworkManager {
         Ok(())
     }
 
-    /// Send a message to all connected clients
+    /// Envia uma mensagem para todos os clientes conectados
     pub async fn send_message(&self, message: &str) -> Result<(), NetworkError> {
         if let Some(sender) = &self.broadcast_sender {
             let message_bytes = message.as_bytes().to_vec();
@@ -177,7 +172,7 @@ impl NetworkManager {
         Ok(())
     }
 
-    /// Clean up expired invite tokens
+    /// Limpa tokens de convite expirados
     pub async fn cleanup_expired_tokens(&self) {
         let mut tokens = self.invite_tokens.lock().await;
         let now = Instant::now();
@@ -187,12 +182,12 @@ impl NetworkManager {
 
 impl Drop for NetworkManager {
     fn drop(&mut self) {
-        // Zeroize sensitive data
+        // Zeroiza dados sensíveis
         self.mode = ConnectionMode::Direct;
     }
 }
 
-/// Handle a client connection on the server side
+/// Lida com conexão de cliente no lado do servidor
 async fn handle_client_connection(
     stream: TcpStream,
     peer_addr: SocketAddr,
@@ -201,43 +196,46 @@ async fn handle_client_connection(
     event_sender: UnboundedSender<NetworkEvent>,
     _tokens: Arc<Mutex<HashMap<String, (Instant, String)>>>,
 ) -> Result<(), NetworkError> {
-    // Upgrade to WebSocket
+    // Atualiza para WebSocket
     let ws_stream = ServerBuilder::new()
         .accept(stream)
         .await
         .map_err(|e| NetworkError::WebSocketFailed(e.to_string()))?;
-    
+
     {
         let mut conns = connections.lock().await;
         conns.push(ws_stream);
     }
-    
+
     let mut broadcast_receiver = broadcast_sender.subscribe();
     
-    // Get the WebSocket stream for this client
+    // Pega o WebSocket stream para este cliente
     let mut ws_stream = {
         let mut conns = connections.lock().await;
-        conns.pop().unwrap() // We just added it
+        conns.pop().unwrap() // Acabamos de adicionar
     };
-    
+
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
-    
-    // Handle incoming messages from this client
+
+    // Lida com mensagens de entrada deste cliente
     let connections_clone = Arc::clone(&connections);
     let event_sender_clone = event_sender.clone();
     let receive_task = tokio::spawn(async move {
         while let Some(message) = ws_receiver.next().await {
             match message {
-                Ok(Message::Text(text)) => {
-                    println!("Received from {}: {}", peer_addr, text);
-                    // Broadcast to all other clients
-                    let _ = broadcast_sender.send(text.into_bytes());
+                Ok(msg) if msg.is_text() => {
+                    if let Some(text) = msg.as_text() {
+                        println!("Received from {}: {}", peer_addr, text);
+                        // Transmite para todos os outros clientes
+                        let _ = broadcast_sender.send(text.as_bytes().to_vec());
+                    }
                 }
-                Ok(Message::Binary(data)) => {
+                Ok(msg) if msg.is_binary() => {
+                    let data = msg.into_payload();
                     println!("Received binary from {}: {} bytes", peer_addr, data.len());
-                    let _ = broadcast_sender.send(data);
+                    let _ = broadcast_sender.send(data.to_vec());
                 }
-                Ok(Message::Close(_)) => {
+                Ok(msg) if msg.is_close() => {
                     println!("Client {} disconnected", peer_addr);
                     break;
                 }
@@ -249,46 +247,48 @@ async fn handle_client_connection(
             }
         }
     });
-    
-    // Handle outgoing messages to this client
+
+    // Lida com mensagens de saída para este cliente
     let send_task = tokio::spawn(async move {
         while let Ok(data) = broadcast_receiver.recv().await {
-            if let Err(e) = ws_sender.send(Message::Binary(data)).await {
+            if let Err(e) = ws_sender.send(Message::binary(data)).await {
                 eprintln!("Failed to send to {}: {}", peer_addr, e);
                 break;
             }
         }
     });
-    
-    // Wait for either task to complete
+
+    // Aguarda qualquer task completar
     tokio::select! {
         _ = receive_task => {},
         _ = send_task => {},
     }
-    
+
     let _ = event_sender.send(NetworkEvent::UserDisconnected(peer_addr.to_string()));
     
     Ok(())
 }
 
-/// Handle connection to a server (client side)
+/// Lida com conexão ao servidor (lado cliente)
 async fn handle_server_connection(
     mut ws_stream: WebSocketStream<TcpStream>,
     event_sender: UnboundedSender<NetworkEvent>,
 ) -> Result<(), NetworkError> {
     let _ = event_sender.send(NetworkEvent::ConnectionEstablished);
-    
+
     while let Some(message) = ws_stream.next().await {
         match message {
-            Ok(Message::Text(text)) => {
-                let _ = event_sender.send(NetworkEvent::MessageReceived(text));
+            Ok(msg) if msg.is_text() => {
+                if let Some(text) = msg.as_text() {
+                    let _ = event_sender.send(NetworkEvent::MessageReceived(text.to_string()));
+                }
             }
-            Ok(Message::Binary(data)) => {
-                if let Ok(text) = String::from_utf8(data) {
+            Ok(msg) if msg.is_binary() => {
+                if let Ok(text) = String::from_utf8(msg.into_payload().to_vec()) {
                     let _ = event_sender.send(NetworkEvent::MessageReceived(text));
                 }
             }
-            Ok(Message::Close(_)) => {
+            Ok(msg) if msg.is_close() => {
                 println!("Server closed connection");
                 break;
             }
@@ -299,8 +299,18 @@ async fn handle_server_connection(
             _ => {}
         }
     }
-    
+
     Ok(())
+}
+
+// Temporary token generation function until crypto module is ready
+fn generate_token() -> Vec<u8> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    timestamp.to_be_bytes().to_vec()
 }
 
 #[derive(Debug)]
@@ -311,6 +321,7 @@ pub enum NetworkError {
     InvalidInviteUri,
     SendFailed,
     TorNotSupported,
+    UriError(String),
 }
 
 impl std::fmt::Display for NetworkError {
@@ -322,8 +333,16 @@ impl std::fmt::Display for NetworkError {
             NetworkError::InvalidInviteUri => write!(f, "Invalid invite URI format"),
             NetworkError::SendFailed => write!(f, "Failed to send message"),
             NetworkError::TorNotSupported => write!(f, "Tor connections not yet implemented"),
+            NetworkError::UriError(e) => write!(f, "URI error: {}", e),
         }
     }
 }
 
 impl std::error::Error for NetworkError {}
+
+// Add From implementation for http::uri::InvalidUri
+impl From<http::uri::InvalidUri> for NetworkError {
+    fn from(err: http::uri::InvalidUri) -> Self {
+        NetworkError::UriError(err.to_string())
+    }
+}

@@ -1,10 +1,10 @@
-use color_eyre::{eyre::Result, Report};
+use color_eyre::eyre::Result;
 use tokio::time::Duration;
 use tokio::sync::mpsc;
 use std::net::SocketAddr;
 
 mod app;
-mod crypto;
+mod crypton;
 mod event;
 mod network;
 mod tui;
@@ -22,19 +22,19 @@ async fn main() -> Result<()> {
     let mut app = App::new();
     let mut tui = TuiManager::new()?;
     
-    // Initialize terminal
+    // Inicializa terminal
     tui.init()?;
     
-    // Create event handler
+    // Cria manipulador de eventos
     let mut events = EventHandler::new(Duration::from_millis(50));
     
-    // Create network event channel
+    // Cria canal de eventos de rede
     let (network_sender, mut network_receiver) = mpsc::unbounded_channel::<NetworkEvent>();
     
-    // Create network manager
+    // Cria gerenciador de rede
     let mut network = NetworkManager::new(network_sender);
     
-    // Get event sender for network events
+    // Pega sender de eventos para eventos de rede
     let event_sender = events.sender();
     
     // Spawn network event forwarder
@@ -44,17 +44,17 @@ async fn main() -> Result<()> {
         }
     });
     
-    // Main application loop
+    // Loop principal da aplicação
     while !app.should_quit {
-        // Draw the current state
+        // Desenha o estado atual
         tui.draw(&mut app)?;
         
-        // Handle events
+        // Lida com eventos
         match events.next().await? {
             Event::Key(key) => {
                 app.handle_key(key)?;
                 
-                // Handle network-related commands
+                // Lida com comandos relacionados à rede
                 if let Some(command) = check_network_commands(&app) {
                     match command {
                         NetworkCommand::StartHost => {
@@ -90,15 +90,14 @@ async fn main() -> Result<()> {
             }
             Event::Tick => {
                 app.tick();
-                
-                // Clean up expired tokens periodically
+                // Limpa tokens expirados periodicamente
                 network.cleanup_expired_tokens().await;
             }
             Event::Network(net_event) => {
                 handle_network_event(&mut app, net_event);
             }
             Event::Resize(w, h) => {
-                // Handle terminal resize if needed
+                // Lida com redimensionamento de terminal se necessário
                 app.status_message = format!("Terminal resized to {}x{}", w, h);
             }
         }
@@ -106,7 +105,6 @@ async fn main() -> Result<()> {
     
     // Cleanup
     tui.restore()?;
-    
     Ok(())
 }
 
@@ -118,8 +116,8 @@ enum NetworkCommand {
 }
 
 fn check_network_commands(app: &App) -> Option<NetworkCommand> {
-    // This is a simplified check - in a real implementation, you'd want to
-    // track command state more carefully
+    // Esta é uma verificação simplificada - em uma implementação real, você desejaria
+    // rastrear o estado do comando de forma mais cuidadosa
     match app.mode {
         AppMode::Host if app.invite_uri.is_none() => Some(NetworkCommand::StartHost),
         _ => None,
