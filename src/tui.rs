@@ -1,4 +1,4 @@
-use color_eyre::{eyre::Result, Report};
+use color_eyre::eyre::Result;
 use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,

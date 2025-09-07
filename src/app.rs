@@ -1,7 +1,6 @@
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use std::time::Instant;
-use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppMode {

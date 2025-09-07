@@ -1,7 +1,7 @@
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use chacha20poly1305::aead::{Aead, KeyInit};
 use x25519_dalek::{EphemeralSecret, PublicKey, SharedSecret};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::ZeroizeOnDrop;
 use rand::rngs::OsRng;
 
 /// Representa o estado criptográfico de uma sessão

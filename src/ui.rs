@@ -1,6 +1,6 @@
 use crate::app::{App, AppState, DisplayMessage, MessageState};
 use ratatui::{
-    layout::{Constraint, Layout, Margin},
+    layout::{Constraint, Layout},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},

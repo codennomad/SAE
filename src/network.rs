@@ -210,7 +210,7 @@ async fn handle_client_connection(
     let mut broadcast_receiver = broadcast_sender.subscribe();
     
     // Pega o WebSocket stream para este cliente
-    let mut ws_stream = {
+    let ws_stream = {
         let mut conns = connections.lock().await;
         conns.pop().unwrap() // Acabamos de adicionar
     };
