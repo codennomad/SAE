@@ -1,0 +1,50 @@
+[package]
+name = "sae"
+version = "0.1.0"
+edition = "2021"
+authors = ["SAE Developer"]
+description = "Secure Anonymous Echo - Um mensageiro criptografado e efêmero"
+license = "MIT"
+
+[[bin]]
+name = "sae"
+path = "src/main.rs"
+
+[dependencies]
+# TUI Framework
+ratatui = "0.28"
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# Async Runtime
+tokio = { version = "1.40", features = ["full"] }
+tokio-websockets = { version = "0.10", features = ["client", "server", "sha1_smol", "fastrand"] }
+tokio-socks = "0.5"
+futures = "0.3"
+futures-util = { version = "0.3", features = ["sink"] }
+
+# Cryptography
+x25519-dalek = "2.0"
+chacha20poly1305 = "0.10"
+zeroize = { version = "1.8", features = ["derive"] }
+
+# Random Number Generation
+rand = "0.8"
+ring = "0.17"
+
+# QR Code Generation
+qr2term = "0.3"
+
+# Error Handling
+color-eyre = "0.6"
+thiserror = "1.0"
+
+# Utilities
+serde = { version = "1.0", features = ["derive"] }
+base64 = "0.22"
+hex = "0.4"
+qr_code = "2.0"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+
