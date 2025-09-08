@@ -19,6 +19,13 @@ pub enum MessageState {
 }
 
 #[derive(Debug, Clone)]
+pub enum Action {
+    GenerateInvite,
+    ConnectTo(String),
+    SendMessage(String),
+}
+
+#[derive(Debug, Clone)]
 pub struct DisplayMessage {
     pub content: String,
     pub arrival_time: Instant,
@@ -59,6 +66,7 @@ pub struct App {
     pub status_message: String,
     pub invite_uri: Option<String>,
     pub qr_code: Option<String>,
+    //pub is_stealth_mode: bool,
 }
 
 impl Default for App {
@@ -154,7 +162,7 @@ impl App {
                         }
                     }
                     KeyCode::Enter => {
-                        self.handle_input()?;
+                        // Key handling is done in main.rs after this call returns
                     }
                     KeyCode::Esc => {
                         self.input.clear();
@@ -167,57 +175,59 @@ impl App {
         Ok(())
     }
 
-    fn handle_input(&mut self) -> Result<()> {
-        let input = self.input.trim().to_string(); // Clona o input para evitar problemas de borrow
+    pub fn handle_input(&mut self) -> Result<Option<Action>> {
+        let input = self.input.trim().to_string(); 
+        self.input.clear();
+        self.input_cursor = 0;
+        
         if input.is_empty() {
-            return Ok(());
+            return Ok(None);
         }
 
         if input.starts_with('/') {
-            self.handle_command(&input)?;
+            self.handle_command(&input)
         } else {
             // Mensagem regular
-            self.add_message(input, Some("You".to_string()));
+            Ok(Some(Action::SendMessage(input)))
         }
-
-        self.input.clear();
-        self.input_cursor = 0;
-        Ok(())
     }
 
-    fn handle_command(&mut self, command: &str) -> Result<()> {
+    fn handle_command(&mut self, command: &str) -> Result<Option<Action>> {
         let parts: Vec<&str> = command.split_whitespace().collect();
         
         match parts.first() {
             Some(&"/quit") | Some(&"/q") | Some(&"/exit") => {
                 self.should_quit = true;
+                Ok(None)
             }
             Some(&"/invite") | Some(&"/i") => {
                 self.mode = AppMode::Host;
                 self.status_message = "Generating invitation...".to_string();
-                // TODO: Generate actual invite
-                self.invite_uri = Some("sae://example_key@127.0.0.1:8080?token=abc123".to_string());
+                Ok(Some(Action::GenerateInvite))
             }
             Some(&"/connect") | Some(&"/c") => {
                 if let Some(uri) = parts.get(1) {
                     self.mode = AppMode::Client;
                     self.status_message = format!("Connecting to {}", uri);
-                    // TODO: Initiate connection
+                    Ok(Some(Action::ConnectTo(uri.to_string())))
                 } else {
                     self.status_message = "Usage: /connect <sae://uri>".to_string();
+                    Ok(None)
                 }
             }
             Some(&"/clear") => {
                 self.messages.clear();
+                Ok(None)
             }
             Some(&"/help") | Some(&"/h") => {
                 self.add_system_message("Commands: /invite, /connect <uri>, /clear, /quit");
+                Ok(None)
             }
             _ => {
                 self.status_message = format!("Unknown command: {}", command);
+                Ok(None)
             }
         }
-        Ok(())
     }
 
     pub fn add_message(&mut self, content: String, sender: Option<String>) {

@@ -2,6 +2,7 @@ use color_eyre::eyre::Result;
 use tokio::time::Duration;
 use tokio::sync::mpsc;
 use std::net::SocketAddr;
+use app::{App, AppMode, Action};
 
 mod app;
 mod crypton;
@@ -10,7 +11,7 @@ mod network;
 mod tui;
 mod ui;
 
-use app::{App, AppMode};
+
 use event::{Event, EventHandler};
 use network::{NetworkManager, NetworkEvent};
 use tui::TuiManager;
@@ -53,40 +54,44 @@ async fn main() -> Result<()> {
         match events.next().await? {
             Event::Key(key) => {
                 app.handle_key(key)?;
-                
-                // Lida com comandos relacionados à rede
-                if let Some(command) = check_network_commands(&app) {
-                    match command {
-                        NetworkCommand::StartHost => {
-                            let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
-                            match network.start_host(addr).await {
-                                Ok(invite_uri) => {
-                                    app.invite_uri = Some(invite_uri.clone());
-                                    app.status_message = "Host started! Invite URI generated.".to_string();
-                                    app.add_system_message(&format!("Invite URI: {}", invite_uri));
-                                }
-                                Err(e) => {
-                                    app.status_message = format!("Failed to start host: {}", e);
-                                }
-                            }
-                        }
-                        NetworkCommand::ConnectToHost(uri) => {
-                            match network.connect_to_host(&uri).await {
-                                Ok(()) => {
-                                    app.status_message = "Connecting...".to_string();
-                                }
-                                Err(e) => {
-                                    app.status_message = format!("Connection failed: {}", e);
+
+                if key.code == crossterm::event::KeyCode::Enter {
+                    if let Some(action) = app.handle_input()? {
+                        match action {
+                            Action::GenerateInvite => {
+                                let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+                                match network.start_host(addr).await {
+                                    Ok(invite_uri) => {
+                                        app.invite_uri = Some(invite_uri.clone());
+                                        app.status_message = "Host started! Invite URI generated.".to_string();
+                                        app.add_system_message(&format!("Invite URI: {}", invite_uri));
+                                    }
+                                    Err(e) => {
+                                        app.status_message = format!("Failed to start host: {}", e);
+                                    }
                                 }
                             }
-                        }
-                        NetworkCommand::SendMessage(msg) => {
-                            if let Err(e) = network.send_message(&msg).await {
-                                app.status_message = format!("Failed to send message: {}", e);
+                            Action::ConnectTo(uri) => {
+                                match network.connect_to_host(&uri).await {
+                                    Ok(()) => {
+                                        app.status_message = "Connecting...".to_string();
+                                    }
+                                    Err(e) => {
+                                        app.status_message = format!("Connection failed: {}", e);
+                                    }
+                                }
+                            }
+                            Action::SendMessage(msg) => {
+                                app.add_message(msg.clone(), Some("You".to_string()));
+                                if let Err(e) = network.send_message(&msg).await {
+                                    app.status_message = format!("Failed to send message: {}", e);
+                                }
                             }
                         }
                     }
                 }
+
+                // Removed the NetworkCommand match block that was causing issues
             }
             Event::Tick => {
                 app.tick();
@@ -106,22 +111,6 @@ async fn main() -> Result<()> {
     // Cleanup
     tui.restore()?;
     Ok(())
-}
-
-#[derive(Debug)]
-enum NetworkCommand {
-    StartHost,
-    ConnectToHost(String),
-    SendMessage(String),
-}
-
-fn check_network_commands(app: &App) -> Option<NetworkCommand> {
-    // Esta é uma verificação simplificada - em uma implementação real, você desejaria
-    // rastrear o estado do comando de forma mais cuidadosa
-    match app.mode {
-        AppMode::Host if app.invite_uri.is_none() => Some(NetworkCommand::StartHost),
-        _ => None,
-    }
 }
 
 fn handle_network_event(app: &mut App, event: NetworkEvent) {
