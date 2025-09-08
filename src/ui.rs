@@ -27,7 +27,7 @@ fn render_banner(frame: &mut Frame, app: &App) {
         if elapsed < 1000 {
             create_glitched_text("SAE", elapsed)
         } else {
-            "SAE\nSecure Anonymous Echo".to_string()
+            "SAE\nLink Start...\nSecure Anonymous Echo".to_string()
         }
     } else {
         "SAE".to_string()

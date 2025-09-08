@@ -202,6 +202,9 @@ async fn handle_client_connection(
         .await
         .map_err(|e| NetworkError::WebSocketFailed(e.to_string()))?;
 
+    // Notificar conexão estabelecida
+    let _ = event_sender.send(NetworkEvent::UserConnected(peer_addr.to_string()));
+
     {
         let mut conns = connections.lock().await;
         conns.push(ws_stream);
