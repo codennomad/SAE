@@ -229,4 +229,129 @@ fn glitch_text(text: &str, elapsed_ms: u128) -> String {
         }
     }
     result
-}  
+}
+
+// Banner expandido com mais fases
+fn create_enhanced_banner_text(text: &str, elapsed_ms: u128) -> String {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+
+    match elapsed_ms {
+        // Fase 1: Estatica total (0-200ms)
+        0..=200 = {
+            let static_chars = "█▓▒░";
+            (0..text.len())
+                .map(|_| static_chars.chars().nth(rng.gen_range(0..4)).unwrap())
+                .collect()
+        }
+
+        // Fase 2: Caracteres aparecendo gradualmente (200-1200ms)
+        201..=1200 => {
+            let progress = (elapsed_ms - 200) as f32 / 1000.0;
+            let chars_visible = (text.len() as f32 * progress) as usize;
+
+            let mut result = String::new();
+            for (i, c) in text.chars().enumerate() {
+                if i < chars_visible {
+                    // Caracteres ja revelado, mas com chance de glitch
+                    if rng.gen_bool(0.1) {
+                        result.push('█');
+                    } else {
+                        // Ainda nao revelado
+                        result.push(c);
+                    }
+                } else {
+                    result.push('▓');
+                }
+            }
+            result
+        }
+
+        // Fase 3: Efeito de scan lines(1200-1800ms)
+        1201..=1800 => {
+            let mut result = text.to_string();
+            let scan_pos = ((elapsed_ms - 1200) % 100) as usize;
+
+            // Adiciona linhas de scan
+            result.push('\n');
+            for i in 0..30 {
+                if i == scan_pos || i == scan_pos + 1 {
+                    result.push('─');
+                } else if rng.gen_bool(0.05) {
+                    result.push('░');
+                } else {
+                    result.push(' ');
+                }
+            }
+            result
+        }
+
+        // Fase 4: Texto final com brilho pulsante (1800ms+)
+        _ => {
+            let pulse = ((elapsed_ms - 1800) as f32 / 500.0).sin().abs();
+            if pulse > 0.7 {
+                format!(">>> {} <<<", text) // efeito de destaque
+            } else {
+                text.to_string()
+            }
+        }
+    }
+}
+
+// Animação de digitação para mensagens
+fn create_typing_animation(text: &str, elapsed_ms: u128) -> String {
+    let chars_per_ms = 0.05; //velocidade de digitacao
+    let chars_visible = (elapsed_ms as f32 * chars_per_ms) as usize;
+
+    let mut result: String = text.chars().take(chars_visible).collect();
+
+    // Cursor piscante
+    if elapsed_ms % 1000 < 500 && chars_visible < text.len() {
+        result.push('█');
+    }
+    
+    result
+}
+
+// Materialização cyberpunk
+fn create_materialization_effect(text: &str, elapsed_ms: u128) -> String {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+
+    let phase = elapsed_ms / 300; // Muda fase a cada 300ms
+    let matrix_chars = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝ";
+
+    match phase {
+        0..=2 => {
+            //chuva de caracteres Matrix
+            let mut result = String::new();
+            for _ in 0..text.len() {
+                let random_char = matrix_chars.chars()
+                    .nth(rng.gen_range(0..matrix_chars.len()))
+                    .unwrap_or('?');
+                result.push(random_char);
+            }
+            result
+        }
+        3..=5 => {
+            // Transição - alguns caracteres corretos aparecem
+            let mut result = String::new();
+            for (i, c) in text.chars().enumerate() {
+                if rng.gen_bool(0.3) {
+                    result.push(c);
+                } else {
+                    let random_char = matrix_chars.chars()
+                        .nth(rng.gen_range(0..matrix_chars.len()))
+                        .unwrap_or('?');
+                    result.push(random_char);
+                }
+            }
+            result
+        }
+        _ => {
+            // Texto final materializado
+            format!("◆ {} ◆", text)
+        }
+    }
+}
+
