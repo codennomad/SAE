@@ -8,7 +8,7 @@ use tokio::time::{interval, Duration};
 pub enum Event {
     Key(KeyEvent),
     Tick,
-    Network(crate::network::NetworkEvent),
+    Network(crate::network_secure::NetworkEvent),
     Resize(u16, u16),
 }
 
@@ -23,7 +23,6 @@ impl EventHandler {
         
         let event_sender = sender.clone();
         
-        // Spawn the event handling task
         tokio::spawn(async move {
             let mut event_stream = crossterm::event::EventStream::new();
             let mut tick_interval = interval(tick_rate);
@@ -34,37 +33,17 @@ impl EventHandler {
                 
                 tokio::select! {
                     _ = tick_delay => {
-                        if event_sender.send(Event::Tick).is_err() {
-                            break;
-                        }
+                        event_sender.send(Event::Tick).unwrap();
                     }
-                    maybe_event = crossterm_event => {
-                        match maybe_event {
-                            Some(Ok(evt)) => {
-                                match evt {
-                                    CrosstermEvent::Key(key) => {
-                                        // Only process KeyEventKind::Press to avoid duplicate events
-                                        if key.kind == KeyEventKind::Press {
-                                            if event_sender.send(Event::Key(key)).is_err() {
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    CrosstermEvent::Resize(w, h) => {
-                                        if event_sender.send(Event::Resize(w, h)).is_err() {
-                                            break;
-                                        }
-                                    }
-                                    _ => {}
-                                }
+                    Some(Ok(evt)) = crossterm_event => {
+                        match evt {
+                            CrosstermEvent::Key(key) if key.kind == KeyEventKind::Press => {
+                                event_sender.send(Event::Key(key)).unwrap();
                             }
-                            Some(Err(_)) => {
-                                // Error reading event, continue
+                            CrosstermEvent::Resize(w, h) => {
+                                event_sender.send(Event::Resize(w, h)).unwrap();
                             }
-                            None => {
-                                // Stream ended
-                                break;
-                            }
+                            _ => {}
                         }
                     }
                 }
@@ -76,7 +55,7 @@ impl EventHandler {
     
     pub async fn next(&mut self) -> Result<Event> {
         self.receiver.recv().await
-            .ok_or_else(|| color_eyre::eyre::eyre!("Event channel closed"))
+            .ok_or_else(|| color_eyre::eyre::eyre!("Canal de eventos fechado"))
     }
     
     pub fn sender(&self) -> UnboundedSender<Event> {
