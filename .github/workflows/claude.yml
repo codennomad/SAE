@@ -19,11 +19,6 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       # Generate a token from your custom GitHub App
       - name: Generate GitHub App token
         id: app-token
@@ -31,6 +26,11 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Setup Rust toolchain for SAE project
       - name: Setup Rust
