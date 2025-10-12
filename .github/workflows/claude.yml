@@ -1,14 +1,42 @@
-name: Claude with Custom App
+name: Claude Code Assistant
+
 on:
   issue_comment:
     types: [created]
-  # ... other triggers
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issues:
+    types: [opened, labeled]
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   claude-response:
     runs-on: ubuntu-latest
+
+    # Only run if comment starts with @claude or has specific labels
+    if: |
+      (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'claude')) ||
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push')
+
+    timeout-minutes: 30
+
     steps:
-      # Generate a token from your custom app
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Generate a token from your custom GitHub App
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -16,9 +44,63 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # Use Claude with your custom app's token
-      - uses: anthropics/claude-code-action@beta
+      # Setup Rust toolchain for SAE project
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # Run Claude Code Action with custom app token
+      - name: Claude Code Assistant
+        uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
-          # ... other configuration
+          model: claude-sonnet-4
+          max_tokens: 8192
+          temperature: 0.7
+
+          # Project-specific configuration for SAE
+          system_prompt: |
+            You are assisting with the SAE (Secure Anonymous Echo) project,
+            a secure and anonymous messaging application written in Rust.
+
+            Key focus areas:
+            - Security: E2EE, Ed25519 signatures, Perfect Forward Secrecy
+            - Cryptography: X25519, ChaCha20-Poly1305, Double Ratchet
+            - Privacy: Tor integration, traffic analysis resistance
+            - Code quality: Rust best practices, async/await patterns
+
+            Always prioritize security and privacy in your suggestions.
+
+          # Enable additional features
+          enable_code_review: true
+          enable_security_analysis: true
+          enable_performance_suggestions: true
+
+      # Optional: Run tests after Claude makes changes
+      - name: Run tests
+        if: success()
+        run: cargo test --all-features
+        continue-on-error: true
+
+      # Optional: Security audit
+      - name: Security audit
+        if: success()
+        run: |
+          cargo install cargo-audit || true
+          cargo audit || true
+        continue-on-error: true
